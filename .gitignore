@@ -1,0 +1,15 @@
+__pycache__/
+*.egg-info/
+dist/
+build/
+*.pyc
+
+# Generated output
+polaris_detector.png
+
+# Exploratory bathymetry files (keep only bathymetry_wide.nc)
+bathy_Philippine_Sea_E.nc
+bathy_Shikoku_Basin.nc
+bathy_South_of_Okinawa.nc
+bathymetry.nc
+bathymetry_hires.nc

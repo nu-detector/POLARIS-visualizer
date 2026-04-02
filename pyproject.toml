@@ -1,0 +1,24 @@
+[project]
+name = "POLARIS-visualizer"
+version = "0.1.0"
+description = "Publication-quality 3D rendering of the POLARIS underwater neutrino detector"
+license = "BSD-3-Clause"
+authors = [
+    { name = "Anatoli Fedynitch" },
+]
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "scipy",
+    "pyvista",
+    "xarray",
+    "netCDF4",
+    "matplotlib",
+]
+
+[project.scripts]
+polaris-viz = "render_polaris:main"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
