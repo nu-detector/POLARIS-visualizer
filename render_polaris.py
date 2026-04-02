@@ -2,13 +2,38 @@
 """Render a publication-quality 3D illustration of the Polaris neutrino detector."""
 
 import argparse
+import os
 import numpy as np
 from collections import defaultdict
 
 import pyvista as pv
+import requests
 import xarray as xr
 from scipy.ndimage import zoom as ndzoom
 from scipy.interpolate import RegularGridInterpolator
+
+# Default bathymetry region: east of Taiwan (23.15-23.85N, 123.15-123.85E)
+BATHY_LAT_CENTER = 23.5
+BATHY_LON_CENTER = 123.5
+BATHY_HALF_DEG = 0.35
+
+
+def download_bathymetry(output_path):
+    """Download SRTM15+ bathymetry from NOAA ERDDAP."""
+    lat_min = BATHY_LAT_CENTER - BATHY_HALF_DEG
+    lat_max = BATHY_LAT_CENTER + BATHY_HALF_DEG
+    lon_min = BATHY_LON_CENTER - BATHY_HALF_DEG
+    lon_max = BATHY_LON_CENTER + BATHY_HALF_DEG
+    url = (
+        f"https://coastwatch.pfeg.noaa.gov/erddap/griddap/srtm15plus.nc"
+        f"?z[({lat_min}):1:({lat_max})][({lon_min}):1:({lon_max})]"
+    )
+    print(f"Downloading bathymetry from NOAA ERDDAP...")
+    resp = requests.get(url, timeout=60)
+    resp.raise_for_status()
+    with open(output_path, 'wb') as f:
+        f.write(resp.content)
+    print(f"Saved bathymetry to {output_path} ({len(resp.content)} bytes)")
 
 
 def parse_geo_file(path):
@@ -122,19 +147,19 @@ def render(geo_path, bathy_path, output_path, resolution=(4000, 3000),
            interactive=False):
     pv.OFF_SCREEN = not interactive
 
+    if not os.path.exists(bathy_path):
+        download_bathymetry(bathy_path)
+
     strings = parse_geo_file(geo_path)
     positions = get_string_positions(strings)
 
     all_z = [z for doms in strings.values() for (_, _, z, _) in doms]
     z_min, z_max = min(all_z), max(all_z)
-    z_center = (z_min + z_max) / 2
-
     all_xy = np.array(list(positions.values()))
     cx, cy = all_xy.mean(axis=0)
 
     # --- Bathymetry ---
-    center_lat, center_lon = 23.5, 123.5
-    x_m, y_m, bathy_z = load_bathymetry(bathy_path, center_lat, center_lon)
+    x_m, y_m, bathy_z = load_bathymetry(bathy_path, BATHY_LAT_CENTER, BATHY_LON_CENTER)
 
     # Shift so the *highest* point of the seafloor sits 150m below detector bottom
     bathy_max = np.nanmax(bathy_z)
@@ -147,7 +172,6 @@ def render(geo_path, bathy_path, output_path, resolution=(4000, 3000),
     y_scaled = y_m * spatial_scale
 
     # Exaggerate vertical relief for visual impact
-    bathy_range = bathy_z_shifted.max() - bathy_z_shifted.min()
     bathy_centered = bathy_z_shifted - np.nanmean(bathy_z_shifted)
     bathy_exaggerated = np.nanmean(bathy_z_shifted) + bathy_centered * 1.5
 
@@ -159,17 +183,6 @@ def render(geo_path, bathy_path, output_path, resolution=(4000, 3000),
         method='linear', bounds_error=False,
         fill_value=np.nanmean(bathy_exaggerated)
     )
-
-    # --- Water volume (large translucent box) ---
-    terrain_xmin, terrain_xmax = x_scaled[0], x_scaled[-1]
-    terrain_ymin, terrain_ymax = y_scaled[0], y_scaled[-1]
-    water_top = z_max + 300  # just above detector top
-    water_bottom = bathy_z_shifted.min() - 100
-    water_box = pv.Box(bounds=(
-        terrain_xmin, terrain_xmax,
-        terrain_ymin, terrain_ymax,
-        water_bottom, water_top
-    ))
 
     # --- Detector ---
     dom_points = []

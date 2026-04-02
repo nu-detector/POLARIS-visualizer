@@ -14,6 +14,7 @@ dependencies = [
     "xarray",
     "netCDF4",
     "matplotlib",
+    "requests",
 ]
 
 [project.scripts]
