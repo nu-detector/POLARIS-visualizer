@@ -214,10 +214,10 @@ def render(geo_path, bathy_path, output_path, resolution=(4000, 3000),
         anchor_top = np.array([bot[0], bot[1], floor_z + bsz])
         anchor_lines.append(pv.Line(anchor_top, bot))
 
-    # --- Taipei 101 for scale ---
-    t101_x = all_xy[:, 0].min() - 600
-    t101_y = cy
-    t101_z = seafloor_target  # standing on seafloor
+    # --- Taipei 101 for scale --- next to central strings, on the ground
+    t101_x = 1800
+    t101_y = 400  # just beside the center string pair
+    t101_z = float(seafloor_interp((t101_y, t101_x))) + 30  # on the ground
     taipei101 = build_taipei101((t101_x, t101_y, t101_z), height=508)
 
     # --- Scale bar (1 km) --- placed close to detector edge
@@ -227,16 +227,25 @@ def render(geo_path, bathy_path, output_path, resolution=(4000, 3000),
     # --- 500m indicator between two adjacent string pairs along arm 1 ---
     # Arm 1 strings at y≈±100: e.g. string at x=0 and x=500 (500m apart)
     ind500_z = z_max + 60
-    ind500_start = np.array([0, 0, ind500_z])
-    ind500_end = np.array([500, 0, ind500_z])
+    ind500_start = np.array([1000, -100, ind500_z])
+    ind500_end = np.array([1500, -100, ind500_z])
     ind500_bar = build_scale_bar(ind500_start, 500, [1, 0, 0], tick_height=30)
 
     # --- 200m indicator between two strings within a pair ---
     # e.g. string pair at x=0: y=-100 and y=100
     ind200_z = z_max + 60
-    ind200_start = np.array([0, -100, ind200_z])
-    ind200_end = np.array([0, 100, ind200_z])
+    ind200_start = np.array([1000, -100, ind200_z])
+    ind200_end = np.array([1000, 100, ind200_z])
     ind200_bar = build_scale_bar(ind200_start, 200, [0, 1, 0], tick_height=30)
+
+    # --- Vertical indicator over instrumented string length (450m) ---
+    # Place next to an outer string on arm 1 for visibility
+    indv_x = 2500 + 150  # just outside the rightmost string
+    indv_y = -100
+    indv_bar = build_scale_bar(
+        np.array([indv_x, indv_y, z_min]), int(z_max - z_min),
+        [0, 0, 1], tick_height=30
+    )
 
     # --- Render ---
     plotter = pv.Plotter(window_size=resolution, off_screen=not interactive)
@@ -299,7 +308,7 @@ def render(geo_path, bathy_path, output_path, resolution=(4000, 3000),
     t101_label_pt = np.array([t101_x, t101_y, t101_z + 508 + 80])
     plotter.add_point_labels(
         pv.PolyData(t101_label_pt.reshape(1, 3)),
-        ['Taipei 101\n(508 m)'], font_size=36, text_color='#333333',
+        ['Taipei 101\n(508 m)'], font_size=52, text_color='#333333',
         shape=None, render_points_as_spheres=False,
         point_size=0, always_visible=True,
     )
@@ -309,7 +318,7 @@ def render(geo_path, bathy_path, output_path, resolution=(4000, 3000),
     bar_mid = bar_origin + np.array([500, -120, 0])
     plotter.add_point_labels(
         pv.PolyData(bar_mid.reshape(1, 3)),
-        ['1 km'], font_size=48, text_color='black',
+        ['1 km'], font_size=60, text_color='black',
         shape=None, render_points_as_spheres=False,
         point_size=0, always_visible=True,
     )
@@ -319,7 +328,7 @@ def render(geo_path, bathy_path, output_path, resolution=(4000, 3000),
     ind500_mid = (ind500_start + ind500_end) / 2 + np.array([0, -80, 0])
     plotter.add_point_labels(
         pv.PolyData(ind500_mid.reshape(1, 3)),
-        ['500 m'], font_size=40, text_color='#AA0000',
+        ['500 m'], font_size=56, text_color='#AA0000',
         shape=None, render_points_as_spheres=False,
         point_size=0, always_visible=True,
     )
@@ -329,14 +338,24 @@ def render(geo_path, bathy_path, output_path, resolution=(4000, 3000),
     ind200_mid = (ind200_start + ind200_end) / 2 + np.array([-120, 0, 0])
     plotter.add_point_labels(
         pv.PolyData(ind200_mid.reshape(1, 3)),
-        ['200 m'], font_size=40, text_color='#AA0000',
+        ['200 m'], font_size=56, text_color='#AA0000',
+        shape=None, render_points_as_spheres=False,
+        point_size=0, always_visible=True,
+    )
+
+    # Vertical string length indicator (450m)
+    plotter.add_mesh(indv_bar, color='#AA0000', line_width=3)
+    indv_mid = np.array([indv_x + 100, indv_y, (z_min + z_max) / 2])
+    plotter.add_point_labels(
+        pv.PolyData(indv_mid.reshape(1, 3)),
+        [f'{int(z_max - z_min)} m'], font_size=56, text_color='#AA0000',
         shape=None, render_points_as_spheres=False,
         point_size=0, always_visible=True,
     )
 
     # Title
-    plotter.add_text('POLARIS', position='upper_left', font_size=24,
-                     color='black', font='times')
+    plotter.add_text('POLARIS', position=(0.88, 0.05), font_size=48,
+                     color='black', font='times', viewport=True)
 
     # Camera - higher perspective, focal point lowered to include anchors
     cam_dist = 10000
@@ -350,9 +369,14 @@ def render(geo_path, bathy_path, output_path, resolution=(4000, 3000),
     cam_z = focal_z + cam_dist * np.sin(elev_rad)
     focal = np.array([cx, cy, focal_z])
 
-    plotter.camera.position = (cam_x, cam_y, cam_z)
-    plotter.camera.focal_point = tuple(focal)
-    plotter.camera.up = (0, 0, 1)
+    # Move camera 20% closer to focal point
+    cam_pos = np.array([3003.409, 6783.348, 1651.120])
+    foc_pos = np.array([266.620, 503.765, -2972.534])
+    cam_pos = cam_pos + 0.20 * (foc_pos - cam_pos)
+
+    plotter.camera.position = tuple(cam_pos)
+    plotter.camera.focal_point = tuple(foc_pos)
+    plotter.camera.up = (-0.19071551529371714, -0.5267804585977117, 0.8283296087101055)
 
     plotter.enable_anti_aliasing('msaa')
 
@@ -383,8 +407,8 @@ def main():
                         help='Output image path (default: polaris_detector.png)')
     parser.add_argument('--width', type=int, default=4000,
                         help='Image width in pixels (default: 4000)')
-    parser.add_argument('--height', type=int, default=3000,
-                        help='Image height in pixels (default: 3000)')
+    parser.add_argument('--height', type=int, default=2400,
+                        help='Image height in pixels (default: 2400)')
     parser.add_argument('--interactive', '-i', action='store_true',
                         help='Open interactive 3D window')
     args = parser.parse_args()
