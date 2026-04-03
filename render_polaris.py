@@ -203,7 +203,7 @@ def render(geo_path, bathy_path, output_path, resolution=(4000, 3000),
         # Interpolate seafloor z at this string's (x, y)
         floor_z = float(seafloor_interp((bot[1], bot[0])))
         # Anchor block sitting on seafloor
-        bsz = 18
+        bsz = 10
         anchor = pv.Box(bounds=(
             bot[0] - bsz, bot[0] + bsz,
             bot[1] - bsz, bot[1] + bsz,
@@ -276,7 +276,12 @@ def render(geo_path, bathy_path, output_path, resolution=(4000, 3000),
     if contours.n_points > 0:
         plotter.add_mesh(contours, color='#2A2A4A', line_width=1.2, opacity=0.35)
 
-    # (water volume removed for cleaner look)
+    # Diffuse lighting
+    light = pv.Light(position=(5000, -5000, 5000), focal_point=(0, 0, -2700),
+                     color='white', intensity=0.8)
+    light.positional = False  # directional / diffuse
+    plotter.add_light(light)
+    plotter.enable_lightkit()  # adds soft ambient fill
 
     # Anchor blocks on seafloor
     for ab in anchor_blocks:
