@@ -144,7 +144,7 @@ def build_scale_bar(origin, length, direction, tick_height=30):
 
 
 def render(geo_path, bathy_path, output_path, resolution=(4000, 3000),
-           interactive=False):
+           interactive=False, animate=False):
     pv.OFF_SCREEN = not interactive
 
     if not os.path.exists(bathy_path):
@@ -248,7 +248,8 @@ def render(geo_path, bathy_path, output_path, resolution=(4000, 3000),
     )
 
     # --- Render ---
-    plotter = pv.Plotter(window_size=resolution, off_screen=not interactive)
+    plotter = pv.Plotter(window_size=resolution,
+                         off_screen=not interactive)
     plotter.set_background('white', top='#D6E8F7')
 
     # Terrain - mostly transparent with contour-like shading
@@ -385,7 +386,39 @@ def render(geo_path, bathy_path, output_path, resolution=(4000, 3000),
 
     plotter.enable_anti_aliasing('msaa')
 
-    if interactive:
+    if animate:
+        # Drone-like orbit around the 3-arm intersection (detector center)
+        orbit_center = np.array([0.0, 0.0, (z_min + z_max) / 2])
+        orbit_radius = 9000  # distance from center in xy plane
+        orbit_elev = 45  # degrees from horizontal
+        orbit_z_offset = orbit_radius * np.sin(np.radians(orbit_elev))
+        orbit_r_xy = orbit_radius * np.cos(np.radians(orbit_elev))
+        start_angle = np.arctan2(cam_pos[1] - orbit_center[1],
+                                  cam_pos[0] - orbit_center[0])
+
+        n_frames = 720
+        anim_output = output_path.rsplit('.', 1)[0] + '.mp4'
+
+        plotter.open_movie(anim_output, framerate=30)
+        print(f"Recording {n_frames} frames to {anim_output}...")
+
+        for i in range(n_frames):
+            angle = start_angle + 2 * np.pi * i / n_frames
+            # Gentle vertical bobbing like a drone
+            z_bob = orbit_z_offset + 150 * np.sin(2 * np.pi * i / n_frames)
+            cx_i = orbit_center[0] + orbit_r_xy * np.cos(angle)
+            cy_i = orbit_center[1] + orbit_r_xy * np.sin(angle)
+            cz_i = orbit_center[2] + z_bob
+            plotter.camera.position = (cx_i, cy_i, cz_i)
+            # Focal point slightly below orbit center so camera looks more downward
+            plotter.camera.focal_point = (orbit_center[0], orbit_center[1],
+                                          orbit_center[2] - 500)
+            plotter.camera.up = (0, 0, 1)
+            plotter.write_frame()
+
+        plotter.close()
+        print(f'Saved animation to {anim_output}')
+    elif interactive:
         print("Interactive mode — press 'c' to print camera position, 'q' to quit")
         plotter.show()
         # Print final camera position for copying back into the script
@@ -416,10 +449,13 @@ def main():
                         help='Image height in pixels (default: 2400)')
     parser.add_argument('--interactive', '-i', action='store_true',
                         help='Open interactive 3D window')
+    parser.add_argument('--animate', '-a', action='store_true',
+                        help='Record drone orbit animation (MP4)')
     args = parser.parse_args()
 
     render(args.geo, args.bathy, args.output,
-           resolution=(args.width, args.height), interactive=args.interactive)
+           resolution=(args.width, args.height),
+           interactive=args.interactive, animate=args.animate)
 
 
 if __name__ == '__main__':
